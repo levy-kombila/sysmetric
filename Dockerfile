@@ -15,13 +15,8 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-# 1) Installation des dépendances (timeout 120 s + 10 essais : connexion lente)
-# 2) Suppression de pip : il embarque ses propres copies de msgpack, setuptools
-#    et urllib3 (dossier pip/_vendor) signalées vulnérables par Trivy.
-#    L'application n'a pas besoin de pip pour tourner : on l'enlève de l'image.
-RUN pip install --no-cache-dir --default-timeout=120 --retries 10 -r requirements.txt \
-    && pip uninstall -y pip \
-    && rm -rf /usr/local/lib/python3.12/ensurepip
+RUN pip install --no-cache-dir --default-timeout=120 --retries 10 --upgrade pip \
+    && pip install --no-cache-dir --default-timeout=120 --retries 10 -r requirements.txt
 
 COPY app/ ./app/
 
