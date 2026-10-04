@@ -10,11 +10,13 @@ WORKDIR /app
 # --no-install-recommends + nettoyage du cache apt = image plus petite,
 # donc moins de paquets potentiellement vulnérables.
 RUN apt-get update \
+    && apt-get upgrade -y \
     && apt-get install -y --no-install-recommends procps \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
-RUN pip install --no-cache-dir --default-timeout=120 --retries 10 -r requirements.txt
+RUN pip install --no-cache-dir --default-timeout=120 --retries 10 --upgrade pip \
+    && pip install --no-cache-dir --default-timeout=120 --retries 10 -r requirements.txt
 
 COPY app/ ./app/
 
