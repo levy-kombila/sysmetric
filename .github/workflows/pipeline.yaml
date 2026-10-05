@@ -168,7 +168,7 @@ jobs:
     if: ${{ !github.event.repository.private }}
     permissions:
       contents: read
-      security-events: write  
+      security-events: write   # pour publier les alertes dans l'onglet Security
     steps:
       - uses: actions/checkout@v4
 
@@ -200,7 +200,7 @@ jobs:
           scan-type: config
           scan-ref: .
           severity: CRITICAL,HIGH
-          exit-code: "0"          
+          exit-code: "0"          # rapport uniquement (affiché dans les logs)
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -210,7 +210,7 @@ jobs:
         with:
           context: .
           target: base
-          load: true              
+          load: true              # garde l'image en local pour la scanner
           push: false
           tags: sysmetrics:${{ github.sha }}
           cache-from: type=gha
@@ -258,38 +258,56 @@ jobs:
           image-ref: sysmetrics:${{ github.sha }}
           format: table
           severity: CRITICAL
-          ignore-unfixed: true   
+          ignore-unfixed: true    # on ne bloque que sur les failles qui ont un correctif
           exit-code: "1"
-          skip-setup-trivy: true  
+          skip-setup-trivy: true  # Trivy est déjà installé par l'étape précédente
 
   # =========================================================================
-  # ÉTAPE 5 — CD (Continuous Delivery) : publication de l'image sur GHCR
+  # ÉTAPE 5 — CD (Continuous Delivery) : publication de l'image
+  #           sur Docker Hub ET sur GHCR (GitHub Container Registry)
   #           Uniquement sur un push sur main (pas sur une pull request)
+  #
+  # Secrets à créer dans GitHub (Settings → Secrets and variables → Actions) :
+  #   DOCKERHUB_USERNAME : votre identifiant Docker Hub (ex. levy2025)
+  #   DOCKERHUB_TOKEN    : un "Personal access token" Docker Hub (Read & Write)
   # =========================================================================
   publish-image:
-    name: Publication image (GHCR)
+    name: Publication image (Docker Hub + GHCR)
     runs-on: ubuntu-24.04
     needs: [docker-build-scan]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
-      packages: write          
+      packages: write           # droit d'écrire dans GitHub Container Registry
     steps:
       - uses: actions/checkout@v4
 
       - uses: docker/setup-buildx-action@v3
+
+      # --- Connexion aux deux registres ---
+      - name: Login to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}   # jamais de mot de passe en clair !
 
       - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}  
+          password: ${{ secrets.GITHUB_TOKEN }}      # fourni automatiquement par GitHub
 
-      # Le nom d'image doit être en minuscules pour GHCR
-      - name: Compute image name
-        run: echo "IMAGE=${IMAGE_NAME,,}" >> "$GITHUB_ENV"
+      # Noms d'images (en minuscules, obligatoire pour GHCR)
+      - name: Compute image names
+        env:
+          DOCKERHUB_USER: ${{ secrets.DOCKERHUB_USERNAME }}
+          REPO_NAME: ${{ github.event.repository.name }}
+        run: |
+          echo "HUB_IMAGE=${DOCKERHUB_USER,,}/${REPO_NAME,,}" >> "$GITHUB_ENV"
+          echo "GHCR_IMAGE=${IMAGE_NAME,,}" >> "$GITHUB_ENV"
 
+      # --- Image de l'API ---
       - name: Build & push API image
         uses: docker/build-push-action@v6
         with:
@@ -297,10 +315,13 @@ jobs:
           target: base
           push: true
           tags: |
-            ${{ env.IMAGE }}:latest
-            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.HUB_IMAGE }}:latest
+            ${{ env.HUB_IMAGE }}:${{ github.sha }}
+            ${{ env.GHCR_IMAGE }}:latest
+            ${{ env.GHCR_IMAGE }}:${{ github.sha }}
           cache-from: type=gha
 
+      # --- Image de l'agent ---
       - name: Build & push agent image
         uses: docker/build-push-action@v6
         with:
@@ -308,6 +329,8 @@ jobs:
           target: agent
           push: true
           tags: |
-            ${{ env.IMAGE }}-agent:latest
-            ${{ env.IMAGE }}-agent:${{ github.sha }}
+            ${{ env.HUB_IMAGE }}-agent:latest
+            ${{ env.HUB_IMAGE }}-agent:${{ github.sha }}
+            ${{ env.GHCR_IMAGE }}-agent:latest
+            ${{ env.GHCR_IMAGE }}-agent:${{ github.sha }}
           cache-from: type=gha
