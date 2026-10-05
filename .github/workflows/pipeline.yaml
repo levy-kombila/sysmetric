@@ -168,7 +168,7 @@ jobs:
     if: ${{ !github.event.repository.private }}
     permissions:
       contents: read
-      security-events: write   # pour publier les alertes dans l'onglet Security
+      security-events: write  
     steps:
       - uses: actions/checkout@v4
 
@@ -200,7 +200,7 @@ jobs:
           scan-type: config
           scan-ref: .
           severity: CRITICAL,HIGH
-          exit-code: "0"          # rapport uniquement (affiché dans les logs)
+          exit-code: "0"          
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
@@ -210,7 +210,7 @@ jobs:
         with:
           context: .
           target: base
-          load: true              # garde l'image en local pour la scanner
+          load: true              
           push: false
           tags: sysmetrics:${{ github.sha }}
           cache-from: type=gha
@@ -258,9 +258,9 @@ jobs:
           image-ref: sysmetrics:${{ github.sha }}
           format: table
           severity: CRITICAL
-          ignore-unfixed: true    # on ne bloque que sur les failles qui ont un correctif
+          ignore-unfixed: true   
           exit-code: "1"
-          skip-setup-trivy: true  # Trivy est déjà installé par l'étape précédente
+          skip-setup-trivy: true  
 
   # =========================================================================
   # ÉTAPE 5 — CD (Continuous Delivery) : publication de l'image sur GHCR
@@ -273,7 +273,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     permissions:
       contents: read
-      packages: write           # droit d'écrire dans GitHub Container Registry
+      packages: write          
     steps:
       - uses: actions/checkout@v4
 
@@ -284,7 +284,7 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}   # fourni automatiquement par GitHub
+          password: ${{ secrets.GITHUB_TOKEN }}  
 
       # Le nom d'image doit être en minuscules pour GHCR
       - name: Compute image name
